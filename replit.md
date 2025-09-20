@@ -1,6 +1,6 @@
 # Overview
 
-StudyFit is a React-TypeScript web application that combines education and fitness. Users can capture photos of math or study problems to access solutions, while earning tokens by completing exercise missions. The app features OCR text recognition for problem capture, a token economy system, and fitness tracking capabilities.
+StudyFit is a React-TypeScript web application that combines education and fitness, operating completely anonymously without login requirements. Users can capture photos of math or study problems to access solutions, while earning tokens by completing exercise missions. The app features OCR text recognition for problem capture, a token economy system, fitness tracking capabilities, and a UUID-based anonymous user system with localStorage persistence.
 
 # User Preferences
 
