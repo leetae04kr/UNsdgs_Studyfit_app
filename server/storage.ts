@@ -150,33 +150,51 @@ export class DatabaseStorage implements IStorage {
   // Purchase operations
   async purchaseSolution(userId: string, solutionId: string, problemId?: string): Promise<boolean> {
     const solution = await this.getSolution(solutionId);
-    const user = await this.getUser(userId);
     
-    if (!solution || !user || user.tokens < solution.tokenCost) {
+    if (!solution) {
       return false;
     }
 
     try {
-      await db.transaction(async (tx) => {
-        // Deduct tokens
-        await tx
+      const result = await db.transaction(async (tx) => {
+        // Atomically deduct tokens to prevent race conditions
+        const updateResult = await tx
           .update(users)
           .set({
-            tokens: user.tokens - solution.tokenCost,
+            tokens: sql`${users.tokens} - ${solution.tokenCost}`,
             updatedAt: new Date(),
           })
-          .where(eq(users.id, userId));
+          .where(
+            and(
+              eq(users.id, userId),
+              sql`${users.tokens} >= ${solution.tokenCost}` // Only update if sufficient tokens
+            )
+          )
+          .returning();
 
-        // Record purchase
-        await tx.insert(userSolutions).values({
-          userId,
-          solutionId,
-          problemId,
-          tokensSpent: solution.tokenCost,
-        });
+        if (!updateResult[0]) {
+          throw new Error("Insufficient tokens or user not found");
+        }
+
+        // Record purchase - unique constraint prevents duplicates
+        try {
+          await tx.insert(userSolutions).values({
+            userId,
+            solutionId,
+            problemId,
+            tokensSpent: solution.tokenCost,
+          });
+        } catch (error: any) {
+          if (error.code === '23505') { // Postgres unique violation
+            throw new Error("Solution already purchased");
+          }
+          throw error;
+        }
+
+        return true;
       });
 
-      return true;
+      return result;
     } catch (error) {
       console.error("Failed to purchase solution:", error);
       return false;

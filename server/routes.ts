@@ -3,8 +3,25 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { setupAuth, isAuthenticated } from "./replitAuth";
 import { insertProblemSchema, insertUserExerciseSchema, insertUserSolutionSchema } from "@shared/schema";
+import { z } from "zod";
+
+// Request validation schemas
+const completeExerciseSchema = z.object({
+  userExerciseId: z.string().uuid(),
+  repsCompleted: z.number().int().min(0),
+});
+
+const shopPurchaseSchema = z.object({
+  itemId: z.string(),
+});
+
+const solutionPurchaseSchema = z.object({
+  solutionId: z.string().uuid(),
+  problemId: z.string().uuid().optional(),
+});
 import { db } from "./db";
 import * as schema from "@shared/schema";
+import { eq, and, sql } from "drizzle-orm";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Auth middleware
@@ -50,16 +67,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/solutions', async (req, res) => {
     try {
       const solutions = await storage.getAllSolutions();
-      res.json(solutions);
+      // Remove content from public listings for security
+      const publicSolutions = solutions.map(solution => ({
+        ...solution,
+        content: undefined // Hide content from public API
+      }));
+      res.json(publicSolutions);
     } catch (error) {
       console.error("Error fetching solutions:", error);
       res.status(500).json({ message: "Failed to fetch solutions" });
     }
   });
 
-  app.get('/api/solutions/:id', async (req, res) => {
+  app.get('/api/solutions/:id', isAuthenticated, async (req: any, res) => {
     try {
-      const solution = await storage.getSolution(req.params.id);
+      const userId = req.user.claims.sub;
+      const solutionId = req.params.id;
+      
+      // Check if user owns this solution
+      const userSolutions = await storage.getUserSolutions(userId);
+      const ownsSolution = userSolutions.some((solution: any) => solution.id === solutionId);
+      
+      if (!ownsSolution) {
+        return res.status(403).json({ message: "Access denied. Purchase solution first." });
+      }
+      
+      const solution = await storage.getSolution(solutionId);
       if (!solution) {
         return res.status(404).json({ message: "Solution not found" });
       }
@@ -73,7 +106,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/solutions/purchase', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      const { solutionId, problemId } = req.body;
+      
+      // Validate request body
+      const validationResult = solutionPurchaseSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ 
+          message: "Invalid request data", 
+          errors: validationResult.error.errors 
+        });
+      }
+      
+      const { solutionId, problemId } = validationResult.data;
       
       const success = await storage.purchaseSolution(userId, solutionId, problemId);
       if (success) {
@@ -143,22 +186,85 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/exercises/complete', isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.claims.sub;
-      const { userExerciseId, repsCompleted, tokensEarned } = req.body;
       
-      const completedExercise = await storage.completeUserExercise(
-        userExerciseId,
-        repsCompleted,
-        tokensEarned
-      );
+      // Validate request body
+      const validationResult = completeExerciseSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ 
+          message: "Invalid request data", 
+          errors: validationResult.error.errors 
+        });
+      }
       
-      // Update user tokens
-      await storage.updateUserTokens(userId, tokensEarned);
+      const { userExerciseId, repsCompleted } = validationResult.data;
+      
+      // SECURE: Compute tokens server-side with concurrency protection
+      const result = await db.transaction(async (tx) => {
+        // Atomically mark exercise as completed to prevent race conditions
+        const completionResult = await tx
+          .update(schema.userExercises)
+          .set({
+            completed: true,
+            repsCompleted,
+            completedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(schema.userExercises.id, userExerciseId),
+              eq(schema.userExercises.userId, userId),
+              eq(schema.userExercises.completed, false) // Only update if not already completed
+            )
+          )
+          .returning();
+
+        if (!completionResult[0]) {
+          throw new Error("Exercise not found, already completed, or access denied");
+        }
+
+        // Get the exercise to determine token reward
+        const exercise = await tx
+          .select()
+          .from(schema.exercises)
+          .where(eq(schema.exercises.id, completionResult[0].exerciseId))
+          .limit(1);
+
+        if (!exercise[0]) {
+          throw new Error("Exercise not found");
+        }
+
+        const tokensEarned = exercise[0].tokenReward; // Server-computed tokens
+
+        // Update the completed user exercise with tokens earned
+        await tx
+          .update(schema.userExercises)
+          .set({
+            tokensEarned,
+          })
+          .where(eq(schema.userExercises.id, userExerciseId));
+
+        // Update user tokens atomically
+        await tx
+          .update(schema.users)
+          .set({
+            tokens: sql`${schema.users.tokens} + ${tokensEarned}`,
+            totalExercises: sql`${schema.users.totalExercises} + 1`,
+          })
+          .where(eq(schema.users.id, userId));
+
+        return { tokensEarned, exercise: completionResult[0] };
+      });
+
       const user = await storage.getUser(userId);
-      
-      res.json({ exercise: completedExercise, user });
-    } catch (error) {
+      res.json({ exercise: result.exercise, tokensEarned: result.tokensEarned, user });
+    } catch (error: any) {
       console.error("Error completing exercise:", error);
-      res.status(500).json({ message: "Failed to complete exercise" });
+      if (error.message.includes("already completed")) {
+        res.status(409).json({ message: error.message });
+      } else if (error.message.includes("access denied")) {
+        res.status(403).json({ message: error.message });
+      } else {
+        res.status(500).json({ message: "Failed to complete exercise" });
+      }
     }
   });
 
@@ -174,6 +280,118 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Seed data route (for development)
+  // Server-side shop catalog for security
+  const SHOP_CATALOG = {
+    "1": { title: "Premium Solutions", tokenCost: 50, description: "Detailed step-by-step explanations" },
+    "2": { title: "Avatar Skin", tokenCost: 30, description: "Astronaut theme" },
+    "3": { title: "Study Theme", tokenCost: 20, description: "Dark mode theme" },
+    "4": { title: "Special Exercises", tokenCost: 40, description: "Yoga & Stretching" }
+  };
+
+  // Get shop catalog endpoint
+  app.get("/api/shop/catalog", async (req, res) => {
+    res.json(SHOP_CATALOG);
+  });
+
+  // Shop purchase endpoint - SECURE VERSION
+  app.post("/api/shop/purchase", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      
+      // Validate request body
+      const validationResult = shopPurchaseSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ 
+          message: "Invalid request data", 
+          errors: validationResult.error.errors 
+        });
+      }
+      
+      const { itemId } = validationResult.data;
+
+      // Validate item exists in server catalog
+      const catalogItem = SHOP_CATALOG[itemId as keyof typeof SHOP_CATALOG];
+      if (!catalogItem) {
+        return res.status(404).json({ message: "Item not found" });
+      }
+
+      const { title: itemTitle, tokenCost } = catalogItem;
+
+      if (!userId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+
+      // Use transaction with concurrency protection
+      const result = await db.transaction(async (tx) => {
+        // Atomically deduct tokens to prevent race conditions
+        const updateResult = await tx
+          .update(schema.users)
+          .set({
+            tokens: sql`${schema.users.tokens} - ${tokenCost}`,
+          })
+          .where(
+            and(
+              eq(schema.users.id, userId),
+              sql`${schema.users.tokens} >= ${tokenCost}` // Only update if sufficient tokens
+            )
+          )
+          .returning();
+
+        if (!updateResult[0]) {
+          throw new Error("Insufficient tokens");
+        }
+
+        // Record purchase - unique constraint prevents duplicates
+        try {
+          await tx.insert(schema.shopPurchases).values({
+            userId,
+            itemId,
+            itemTitle,
+            tokensSpent: tokenCost,
+          });
+        } catch (error: any) {
+          if (error.code === '23505') { // Postgres unique violation
+            throw new Error("Item already purchased");
+          }
+          throw error;
+        }
+
+        return { tokensRemaining: updateResult[0].tokens };
+      });
+
+      res.json({ message: "Purchase successful", tokensRemaining: result.tokensRemaining });
+    } catch (error: any) {
+      console.error("Shop purchase error:", error);
+      if (error.message.includes("Insufficient tokens")) {
+        res.status(402).json({ message: error.message }); // Payment Required
+      } else if (error.message.includes("already purchased")) {
+        res.status(409).json({ message: error.message }); // Conflict
+      } else {
+        res.status(500).json({ message: "Purchase failed" });
+      }
+    }
+  });
+
+  // Get user purchases endpoint
+  app.get("/api/shop/purchases", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      if (!userId) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+
+      const purchases = await db
+        .select()
+        .from(schema.shopPurchases)
+        .where(eq(schema.shopPurchases.userId, userId));
+
+      res.json(purchases);
+    } catch (error) {
+      console.error("Error fetching purchases:", error);
+      res.status(500).json({ message: "Failed to fetch purchases" });
+    }
+  });
+
   app.post('/api/seed', async (req, res) => {
     try {
       // Seed solutions

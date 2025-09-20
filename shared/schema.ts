@@ -8,6 +8,7 @@ import {
   text,
   integer,
   boolean,
+  unique,
 } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -88,7 +89,20 @@ export const userSolutions = pgTable("user_solutions", {
   problemId: varchar("problem_id").references(() => problems.id),
   tokensSpent: integer("tokens_spent").notNull(),
   accessedAt: timestamp("accessed_at").defaultNow(),
-});
+}, (table) => ({
+  userSolutionUnique: unique("user_solutions_user_solution_unique").on(table.userId, table.solutionId),
+}));
+
+export const shopPurchases = pgTable("shop_purchases", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id),
+  itemId: varchar("item_id").notNull(),
+  itemTitle: text("item_title").notNull(),
+  tokensSpent: integer("tokens_spent").notNull(),
+  purchasedAt: timestamp("purchased_at").defaultNow(),
+}, (table) => ({
+  userItemUnique: unique("shop_purchases_user_item_unique").on(table.userId, table.itemId),
+}));
 
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
@@ -119,6 +133,11 @@ export const insertUserExerciseSchema = createInsertSchema(userExercises).omit({
 
 export const insertUserSolutionSchema = createInsertSchema(userSolutions).omit({
   id: true,
+});
+
+export const insertShopPurchaseSchema = createInsertSchema(shopPurchases).omit({
+  id: true,
+  purchasedAt: true,
 });
 
 // Types

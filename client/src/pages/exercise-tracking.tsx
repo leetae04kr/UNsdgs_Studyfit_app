@@ -56,7 +56,7 @@ export default function ExerciseTracking() {
       const response = await apiRequest('POST', '/api/exercises/complete', {
         userExerciseId,
         repsCompleted: currentReps,
-        tokensEarned: exercise?.tokenReward || 0,
+        // tokensEarned is now computed server-side for security
       });
       return response.json();
     },
