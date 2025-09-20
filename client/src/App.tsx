@@ -14,6 +14,7 @@ import ExerciseSelection from "@/pages/exercise-selection";
 import ExerciseTracking from "@/pages/exercise-tracking";
 import Profile from "@/pages/profile";
 import TokenShop from "@/pages/token-shop";
+import SolutionView from "@/pages/solution-view";
 
 function Router() {
   const { isAuthenticated, isLoading } = useAuth();
@@ -28,6 +29,7 @@ function Router() {
           <Route path="/camera" component={Camera} />
           <Route path="/ocr-result" component={OcrResult} />
           <Route path="/solution-search" component={SolutionSearch} />
+          <Route path="/solution-view" component={SolutionView} />
           <Route path="/exercise-selection" component={ExerciseSelection} />
           <Route path="/exercise-tracking/:id" component={ExerciseTracking} />
           <Route path="/profile" component={Profile} />

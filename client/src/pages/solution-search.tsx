@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import type { Solution } from "@shared/schema";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -7,24 +7,54 @@ import { Badge } from "@/components/ui/badge";
 import { TokenModal } from "@/components/token-modal";
 import { useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 export default function SolutionSearch() {
   const [, setLocation] = useLocation();
   const [showTokenModal, setShowTokenModal] = useState(false);
-  const [selectedSolution, setSelectedSolution] = useState<any>(null);
+  const [selectedSolution, setSelectedSolution] = useState<Solution | null>(null);
   const { user } = useAuth();
+  const { toast } = useToast();
 
   const { data: solutions = [], isLoading } = useQuery<Solution[]>({
     queryKey: ['/api/solutions'],
   });
 
-  const handleViewSolution = (solution: any) => {
+  const purchaseSolutionMutation = useMutation({
+    mutationFn: async (solution: Solution) => {
+      const currentProblemId = sessionStorage.getItem('currentProblemId');
+      const response = await apiRequest('POST', '/api/solutions/purchase', {
+        solutionId: solution.id,
+        problemId: currentProblemId
+      });
+      return response.json();
+    },
+    onSuccess: (data, solution) => {
+      queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
+      sessionStorage.setItem('purchasedSolution', JSON.stringify(solution));
+      setLocation('/solution-view');
+      toast({
+        title: "Solution Purchased!",
+        description: `You spent ${solution.tokenCost} tokens to unlock this solution.`,
+      });
+    },
+    onError: (error) => {
+      console.error('Purchase failed:', error);
+      toast({
+        title: "Purchase Failed",
+        description: "Unable to purchase solution. Please try again.",
+        variant: "destructive"
+      });
+    }
+  });
+
+  const handleViewSolution = (solution: Solution) => {
     if (!user || user.tokens < solution.tokenCost) {
       setSelectedSolution(solution);
       setShowTokenModal(true);
     } else {
-      // Proceed with purchase (implement later)
-      console.log('Purchase solution:', solution.id);
+      purchaseSolutionMutation.mutate(solution);
     }
   };
 
@@ -105,29 +135,35 @@ export default function SolutionSearch() {
               </div>
               <Button 
                 onClick={() => handleViewSolution(solution)}
+                disabled={purchaseSolutionMutation.isPending}
                 className="px-6 py-2 font-medium"
                 data-testid={`view-solution-${solution.id}`}
               >
-                View Solution
+                {purchaseSolutionMutation.isPending ? "Purchasing..." : "View Solution"}
               </Button>
             </div>
           </Card>
         ))}
 
         {solutions.length === 0 && (
-          <Card className="p-8 text-center">
-            <div className="w-16 h-16 mx-auto mb-4 bg-muted rounded-full flex items-center justify-center">
+          <div className="text-center py-8">
+            <div className="w-16 h-16 bg-muted rounded-full flex items-center justify-center mx-auto mb-4">
               <svg className="w-8 h-8 text-muted-foreground" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
               </svg>
             </div>
-            <h3 className="font-semibold mb-2">No solutions found</h3>
-            <p className="text-muted-foreground text-sm">Try capturing the problem again or check your text recognition.</p>
-          </Card>
+            <h3 className="text-lg font-semibold mb-2">No Solutions Found</h3>
+            <p className="text-muted-foreground mb-4">
+              We couldn't find any matching solutions for your problem.
+            </p>
+            <Button onClick={() => setLocation('/camera')} variant="outline">
+              Try Another Problem
+            </Button>
+          </div>
         )}
       </div>
 
-      <TokenModal 
+      <TokenModal
         isOpen={showTokenModal}
         onClose={() => setShowTokenModal(false)}
         requiredTokens={selectedSolution?.tokenCost || 0}
