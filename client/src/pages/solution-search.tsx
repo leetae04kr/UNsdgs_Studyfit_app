@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import type { Solution } from "@shared/schema";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -13,7 +14,7 @@ export default function SolutionSearch() {
   const [selectedSolution, setSelectedSolution] = useState<any>(null);
   const { user } = useAuth();
 
-  const { data: solutions = [], isLoading } = useQuery({
+  const { data: solutions = [], isLoading } = useQuery<Solution[]>({
     queryKey: ['/api/solutions'],
   });
 
@@ -74,7 +75,7 @@ export default function SolutionSearch() {
       
       {/* Search Results */}
       <div className="p-4 space-y-4">
-        {solutions.map((solution: any) => (
+        {solutions.map((solution) => (
           <Card key={solution.id} className="p-4 border border-border">
             <div className="flex justify-between items-start mb-3">
               <div className="flex gap-2">

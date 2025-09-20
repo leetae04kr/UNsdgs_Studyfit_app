@@ -6,6 +6,7 @@ import { Progress } from "@/components/ui/progress";
 import { ExerciseCompleteModal } from "@/components/exercise-complete-modal";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
+import type { Exercise } from "@shared/schema";
 
 export default function ExerciseTracking() {
   const { id: exerciseId } = useParams();
@@ -18,7 +19,7 @@ export default function ExerciseTracking() {
   const [userExerciseId, setUserExerciseId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState("Position yourself in front of the camera");
 
-  const { data: exercise, isLoading } = useQuery({
+  const { data: exercise, isLoading } = useQuery<Exercise>({
     queryKey: ['/api/exercises', exerciseId],
     enabled: !!exerciseId,
   });

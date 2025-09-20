@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import type { Exercise } from "@shared/schema";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -8,7 +9,7 @@ export default function ExerciseSelection() {
   const [, setLocation] = useLocation();
   const { user } = useAuth();
 
-  const { data: exercises = [], isLoading } = useQuery({
+  const { data: exercises = [], isLoading } = useQuery<Exercise[]>({
     queryKey: ['/api/exercises'],
   });
 
@@ -65,7 +66,7 @@ export default function ExerciseSelection() {
       
       {/* Exercise Missions */}
       <div className="p-4 space-y-4">
-        {exercises.map((exercise: any) => (
+        {exercises.map((exercise) => (
           <Card key={exercise.id} className="p-6 border border-border">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center space-x-4">
