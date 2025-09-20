@@ -12,7 +12,7 @@ import type { Exercise } from "@shared/schema";
 export default function ExerciseTracking() {
   const { id: exerciseId } = useParams();
   const [, setLocation] = useLocation();
-  const { user } = useAuth();
+  const { user, userId } = useAuth();
   
   const [currentReps, setCurrentReps] = useState(0);
   const [isTracking, setIsTracking] = useState(false);
@@ -33,6 +33,7 @@ export default function ExerciseTracking() {
   const startExerciseMutation = useMutation({
     mutationFn: async () => {
       const response = await apiRequest('POST', '/api/exercises/start', {
+        userId,
         exerciseId: exerciseId,
       });
       return response.json();
@@ -54,6 +55,7 @@ export default function ExerciseTracking() {
   const completeExerciseMutation = useMutation({
     mutationFn: async () => {
       const response = await apiRequest('POST', '/api/exercises/complete', {
+        userId,
         userExerciseId,
         repsCompleted: currentReps,
         // tokensEarned is now computed server-side for security
@@ -62,7 +64,7 @@ export default function ExerciseTracking() {
     },
     onSuccess: () => {
       // Refresh user data to update token count
-      queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/auth/user', userId] });
       setShowCompleteModal(true);
     },
     onError: () => {

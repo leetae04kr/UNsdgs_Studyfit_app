@@ -14,7 +14,7 @@ export default function SolutionSearch() {
   const [, setLocation] = useLocation();
   const [showTokenModal, setShowTokenModal] = useState(false);
   const [selectedSolution, setSelectedSolution] = useState<Solution | null>(null);
-  const { user } = useAuth();
+  const { user, userId } = useAuth();
   const { toast } = useToast();
 
   const { data: solutions = [], isLoading } = useQuery<Solution[]>({
@@ -25,13 +25,14 @@ export default function SolutionSearch() {
     mutationFn: async (solution: Solution) => {
       const currentProblemId = sessionStorage.getItem('currentProblemId');
       const response = await apiRequest('POST', '/api/solutions/purchase', {
+        userId,
         solutionId: solution.id,
         problemId: currentProblemId
       });
       return response.json();
     },
     onSuccess: (data, solution) => {
-      queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/auth/user', userId] });
       sessionStorage.setItem('purchasedSolution', JSON.stringify(solution));
       setLocation('/solution-view');
       toast({

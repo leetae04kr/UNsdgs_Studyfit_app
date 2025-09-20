@@ -13,7 +13,7 @@ export default function OcrResult() {
   const [ocrText, setOcrText] = useState("");
   const [isEditing, setIsEditing] = useState(false);
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
-  const { user } = useAuth();
+  const { user, userId } = useAuth();
   const { toast } = useToast();
 
   useEffect(() => {
@@ -33,6 +33,7 @@ export default function OcrResult() {
   const createProblemMutation = useMutation({
     mutationFn: async () => {
       const response = await apiRequest('POST', '/api/problems', {
+        userId,
         imageUrl: capturedImage,
         ocrText: ocrText.trim()
       });
@@ -55,15 +56,6 @@ export default function OcrResult() {
   });
 
   const handleSearch = () => {
-    if (!user) {
-      toast({
-        title: "Authentication Required",
-        description: "Please log in to save problems and search solutions.",
-        variant: "destructive"
-      });
-      return;
-    }
-    
     if (!ocrText.trim()) {
       toast({
         title: "No Text",

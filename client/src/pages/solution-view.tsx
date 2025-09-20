@@ -3,23 +3,45 @@ import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { useAuth } from "@/hooks/useAuth";
+import { apiRequest } from "@/lib/queryClient";
 import type { Solution } from "@shared/schema";
 
 export default function SolutionView() {
   const [, setLocation] = useLocation();
   const [solution, setSolution] = useState<Solution | null>(null);
+  const [loading, setLoading] = useState(true);
+  const { userId } = useAuth();
 
   useEffect(() => {
-    // Get purchased solution from session storage
-    const purchasedSolutionStr = sessionStorage.getItem('purchasedSolution');
-    if (purchasedSolutionStr) {
-      const purchasedSolution = JSON.parse(purchasedSolutionStr);
-      setSolution(purchasedSolution);
-    } else {
-      // If no purchased solution, redirect back to solution search
-      setLocation('/solution-search');
+    const fetchSolutionContent = async () => {
+      // Get purchased solution ID from session storage
+      const purchasedSolutionStr = sessionStorage.getItem('purchasedSolution');
+      if (!purchasedSolutionStr) {
+        setLocation('/solution-search');
+        return;
+      }
+
+      try {
+        const purchasedSolution = JSON.parse(purchasedSolutionStr);
+        
+        // Fetch full solution content from secure endpoint
+        const response = await apiRequest('POST', `/api/solutions/${purchasedSolution.id}`, { userId });
+        const fullSolution = await response.json();
+        
+        setSolution(fullSolution);
+      } catch (error) {
+        console.error('Failed to fetch solution content:', error);
+        setLocation('/solution-search');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    if (userId) {
+      fetchSolutionContent();
     }
-  }, [setLocation]);
+  }, [setLocation, userId]);
 
   const getDifficultyColor = (difficulty: string) => {
     switch (difficulty) {
@@ -34,7 +56,7 @@ export default function SolutionView() {
     }
   };
 
-  if (!solution) {
+  if (loading || !solution) {
     return (
       <div className="min-h-screen max-w-md mx-auto bg-background flex items-center justify-center">
         <div className="text-center">

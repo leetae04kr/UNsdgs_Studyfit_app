@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { setupAuth, isAuthenticated } from "./replitAuth";
+// Removed authentication - now using anonymous users
 import { insertProblemSchema, insertUserExerciseSchema, insertUserSolutionSchema } from "@shared/schema";
 import { z } from "zod";
 
@@ -17,21 +17,47 @@ const shopPurchaseSchema = z.object({
 
 const solutionPurchaseSchema = z.object({
   solutionId: z.string().uuid(),
-  problemId: z.string().uuid().optional(),
+  problemId: z.string().uuid().optional().nullable(),
+});
+
+// Schema for anonymous user ID validation
+const userIdSchema = z.object({
+  userId: z.string().uuid(),
 });
 import { db } from "./db";
 import * as schema from "@shared/schema";
 import { eq, and, sql } from "drizzle-orm";
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Auth middleware
-  await setupAuth(app);
+  // No authentication setup needed - using anonymous users
 
-  // Auth routes
-  app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
+  // Auth routes - now works with anonymous users
+  app.post('/api/auth/user', async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const user = await storage.getUser(userId);
+      // Validate userId from request body
+      const validationResult = userIdSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ 
+          message: "Invalid user ID", 
+          errors: validationResult.error.errors 
+        });
+      }
+      
+      const { userId } = validationResult.data;
+      let user = await storage.getUser(userId);
+      
+      // Create anonymous user if doesn't exist
+      if (!user) {
+        const newUser = {
+          id: userId,
+          email: `anonymous-${userId.slice(0, 8)}@local`,
+          firstName: "Anonymous",
+          lastName: "User",
+          profileImageUrl: null,
+        };
+        user = await storage.upsertUser(newUser);
+      }
+      
       res.json(user);
     } catch (error) {
       console.error("Error fetching user:", error);
@@ -39,11 +65,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Problem routes
-  app.post('/api/problems', isAuthenticated, async (req: any, res) => {
+  // Problem routes - now works with anonymous users
+  app.post('/api/problems', async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const problemData = insertProblemSchema.parse({ ...req.body, userId });
+      // Validate and extract userId from request body
+      const { userId, ...problemBody } = req.body;
+      if (!userId) {
+        return res.status(400).json({ message: "userId is required" });
+      }
+      
+      const problemData = insertProblemSchema.parse({ ...problemBody, userId });
       const problem = await storage.createProblem(problemData);
       res.json(problem);
     } catch (error) {
@@ -52,9 +83,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/problems', isAuthenticated, async (req: any, res) => {
+  app.post('/api/problems/user', async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      // Validate userId from request body
+      const validationResult = userIdSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ 
+          message: "Invalid user ID", 
+          errors: validationResult.error.errors 
+        });
+      }
+      
+      const { userId } = validationResult.data;
       const problems = await storage.getUserProblems(userId);
       res.json(problems);
     } catch (error) {
@@ -79,9 +119,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/solutions/:id', isAuthenticated, async (req: any, res) => {
+  app.post('/api/solutions/purchase', async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      // Validate request body including userId
+      const validationResult = solutionPurchaseSchema.extend({
+        userId: z.string().uuid(),
+      }).safeParse(req.body);
+      
+      if (!validationResult.success) {
+        return res.status(400).json({ 
+          message: "Invalid request data", 
+          errors: validationResult.error.errors 
+        });
+      }
+      
+      const { userId, solutionId, problemId } = validationResult.data;
+      
+      const success = await storage.purchaseSolution(userId, solutionId, problemId);
+      if (success) {
+        const user = await storage.getUser(userId);
+        res.json({ success: true, user });
+      } else {
+        res.status(400).json({ message: "Insufficient tokens or invalid solution" });
+      }
+    } catch (error) {
+      console.error("Error purchasing solution:", error);
+      res.status(500).json({ message: "Failed to purchase solution" });
+    }
+  });
+
+  app.post('/api/solutions/:id', async (req: any, res) => {
+    try {
+      // Validate userId from request body
+      const validationResult = userIdSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ 
+          message: "Invalid user ID", 
+          errors: validationResult.error.errors 
+        });
+      }
+      
+      const { userId } = validationResult.data;
       const solutionId = req.params.id;
       
       // Check if user owns this solution
@@ -103,37 +181,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/solutions/purchase', isAuthenticated, async (req: any, res) => {
+  app.post('/api/user/solutions', async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      
-      // Validate request body
-      const validationResult = solutionPurchaseSchema.safeParse(req.body);
+      // Validate userId from request body
+      const validationResult = userIdSchema.safeParse(req.body);
       if (!validationResult.success) {
         return res.status(400).json({ 
-          message: "Invalid request data", 
+          message: "Invalid user ID", 
           errors: validationResult.error.errors 
         });
       }
       
-      const { solutionId, problemId } = validationResult.data;
-      
-      const success = await storage.purchaseSolution(userId, solutionId, problemId);
-      if (success) {
-        const user = await storage.getUser(userId);
-        res.json({ success: true, user });
-      } else {
-        res.status(400).json({ message: "Insufficient tokens or invalid solution" });
-      }
-    } catch (error) {
-      console.error("Error purchasing solution:", error);
-      res.status(500).json({ message: "Failed to purchase solution" });
-    }
-  });
-
-  app.get('/api/user/solutions', isAuthenticated, async (req: any, res) => {
-    try {
-      const userId = req.user.claims.sub;
+      const { userId } = validationResult.data;
       const solutions = await storage.getUserSolutions(userId);
       res.json(solutions);
     } catch (error) {
@@ -166,10 +225,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/exercises/start', isAuthenticated, async (req: any, res) => {
+  app.post('/api/exercises/start', async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const { exerciseId } = req.body;
+      const { userId, exerciseId } = req.body;
+      
+      if (!userId) {
+        return res.status(400).json({ message: "userId is required" });
+      }
+      if (!exerciseId) {
+        return res.status(400).json({ message: "exerciseId is required" });
+      }
       
       const userExercise = await storage.createUserExercise({
         userId,
@@ -183,12 +248,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/exercises/complete', isAuthenticated, async (req: any, res) => {
+  app.post('/api/exercises/complete', async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      // Extract userId from request body
+      const { userId, ...exerciseData } = req.body;
+      if (!userId) {
+        return res.status(400).json({ message: "userId is required" });
+      }
       
       // Validate request body
-      const validationResult = completeExerciseSchema.safeParse(req.body);
+      const validationResult = completeExerciseSchema.safeParse(exerciseData);
       if (!validationResult.success) {
         return res.status(400).json({ 
           message: "Invalid request data", 
@@ -268,9 +337,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/user/exercises', isAuthenticated, async (req: any, res) => {
+  app.post('/api/user/exercises', async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      // Validate userId from request body
+      const validationResult = userIdSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ 
+          message: "Invalid user ID", 
+          errors: validationResult.error.errors 
+        });
+      }
+      
+      const { userId } = validationResult.data;
       const exercises = await storage.getUserExercises(userId);
       res.json(exercises);
     } catch (error) {
@@ -294,12 +372,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Shop purchase endpoint - SECURE VERSION
-  app.post("/api/shop/purchase", isAuthenticated, async (req: any, res) => {
+  app.post("/api/shop/purchase", async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      // Extract userId from request body
+      const { userId, ...purchaseData } = req.body;
+      
+      if (!userId) {
+        return res.status(400).json({ message: "userId is required" });
+      }
       
       // Validate request body
-      const validationResult = shopPurchaseSchema.safeParse(req.body);
+      const validationResult = shopPurchaseSchema.safeParse(purchaseData);
       if (!validationResult.success) {
         return res.status(400).json({ 
           message: "Invalid request data", 
@@ -316,10 +399,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const { title: itemTitle, tokenCost } = catalogItem;
-
-      if (!userId) {
-        return res.status(401).json({ message: "Authentication required" });
-      }
 
       // Use transaction with concurrency protection
       const result = await db.transaction(async (tx) => {
@@ -373,12 +452,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get user purchases endpoint
-  app.get("/api/shop/purchases", isAuthenticated, async (req: any, res) => {
+  app.post("/api/shop/purchases", async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      if (!userId) {
-        return res.status(401).json({ message: "Authentication required" });
+      // Validate userId from request body
+      const validationResult = userIdSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ 
+          message: "Invalid user ID", 
+          errors: validationResult.error.errors 
+        });
       }
+      
+      const { userId } = validationResult.data;
 
       const purchases = await db
         .select()

@@ -8,12 +8,17 @@ import { useToast } from "@/hooks/use-toast";
 
 export default function TokenShop() {
   const [, setLocation] = useLocation();
-  const { user } = useAuth();
+  const { user, userId } = useAuth();
   const { toast } = useToast();
 
   // Get user's purchased items
   const { data: purchases = [] } = useQuery<any[]>({
-    queryKey: ['/api/shop/purchases'],
+    queryKey: ['/api/shop/purchases', userId],
+    queryFn: async () => {
+      const response = await apiRequest('POST', '/api/shop/purchases', { userId });
+      return response.json();
+    },
+    enabled: !!userId,
   });
 
   // Get shop catalog from server
@@ -49,18 +54,19 @@ export default function TokenShop() {
     },
   ];
 
-  // Purchase mutation - SECURE VERSION (only sends itemId)
+  // Purchase mutation - SECURE VERSION (only sends itemId and userId)
   const purchaseMutation = useMutation({
     mutationFn: async (item: any) => {
       const response = await apiRequest('POST', '/api/shop/purchase', {
+        userId,
         itemId: item.id.toString(), // Only send itemId - server validates everything else
       });
       return response.json();
     },
     onSuccess: (data, item) => {
       // Update user token count and purchased items
-      queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
-      queryClient.invalidateQueries({ queryKey: ['/api/shop/purchases'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/auth/user', userId] });
+      queryClient.invalidateQueries({ queryKey: ['/api/shop/purchases', userId] });
       
       const catalogItem = catalog[item.id.toString()];
       toast({

@@ -7,8 +7,10 @@ export default function Profile() {
   const [, setLocation] = useLocation();
   const { user } = useAuth();
 
-  const handleLogout = () => {
-    window.location.href = "/api/logout";
+  const resetUserData = () => {
+    // Clear the anonymous user ID from localStorage to start fresh
+    localStorage.removeItem("anonymous_user_id");
+    window.location.reload();
   };
 
   return (
@@ -31,12 +33,13 @@ export default function Profile() {
           <Button 
             variant="ghost" 
             size="sm" 
-            onClick={handleLogout}
+            onClick={resetUserData}
             className="w-10 h-10 p-0 rounded-full bg-white/20 text-white hover:bg-white/30"
-            data-testid="logout-button"
+            data-testid="reset-button"
+            title="Reset user data"
           >
             <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.59L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/>
+              <path d="M12 6v3l4-4-4-4v3c-4.42 0-8 3.58-8 8 0 1.57.46 3.03 1.24 4.26L6.7 14.8c-.45-.83-.7-1.79-.7-2.8 0-3.31 2.69-6 6-6zm6.76 1.74L17.3 9.2c.44.84.7 1.79.7 2.8 0 3.31-2.69 6-6 6v-3l-4 4 4 4v-3c4.42 0 8-3.58 8-8 0-1.57-.46-3.03-1.24-4.26z"/>
             </svg>
           </Button>
         </div>

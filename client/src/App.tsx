@@ -3,9 +3,7 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { useAuth } from "@/hooks/useAuth";
 import NotFound from "@/pages/not-found";
-import Landing from "@/pages/landing";
 import Home from "@/pages/home";
 import Camera from "@/pages/camera";
 import OcrResult from "@/pages/ocr-result";
@@ -17,25 +15,17 @@ import TokenShop from "@/pages/token-shop";
 import SolutionView from "@/pages/solution-view";
 
 function Router() {
-  const { isAuthenticated, isLoading } = useAuth();
-
   return (
     <Switch>
-      {isLoading || !isAuthenticated ? (
-        <Route path="/" component={Landing} />
-      ) : (
-        <>
-          <Route path="/" component={Home} />
-          <Route path="/camera" component={Camera} />
-          <Route path="/ocr-result" component={OcrResult} />
-          <Route path="/solution-search" component={SolutionSearch} />
-          <Route path="/solution-view" component={SolutionView} />
-          <Route path="/exercise-selection" component={ExerciseSelection} />
-          <Route path="/exercise-tracking/:id" component={ExerciseTracking} />
-          <Route path="/profile" component={Profile} />
-          <Route path="/token-shop" component={TokenShop} />
-        </>
-      )}
+      <Route path="/" component={Home} />
+      <Route path="/camera" component={Camera} />
+      <Route path="/ocr-result" component={OcrResult} />
+      <Route path="/solution-search" component={SolutionSearch} />
+      <Route path="/solution-view" component={SolutionView} />
+      <Route path="/exercise-selection" component={ExerciseSelection} />
+      <Route path="/exercise-tracking/:id" component={ExerciseTracking} />
+      <Route path="/profile" component={Profile} />
+      <Route path="/token-shop" component={TokenShop} />
       <Route component={NotFound} />
     </Switch>
   );
