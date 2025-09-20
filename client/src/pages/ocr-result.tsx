@@ -3,27 +3,77 @@ import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
+import { useMutation } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/hooks/useAuth";
 
 export default function OcrResult() {
   const [, setLocation] = useLocation();
   const [ocrText, setOcrText] = useState("");
   const [isEditing, setIsEditing] = useState(false);
+  const [capturedImage, setCapturedImage] = useState<string | null>(null);
+  const { user } = useAuth();
+  const { toast } = useToast();
 
   useEffect(() => {
-    // Get OCR text from session storage
+    // Get OCR text and image from session storage
     const savedOcrText = sessionStorage.getItem('ocrText');
-    if (savedOcrText) {
+    const savedImage = sessionStorage.getItem('capturedImage');
+    
+    if (savedOcrText && savedImage) {
       setOcrText(savedOcrText);
+      setCapturedImage(savedImage);
     } else {
-      // If no OCR text, redirect back to camera
+      // If no OCR text or image, redirect back to camera
       setLocation('/camera');
     }
   }, [setLocation]);
 
+  const createProblemMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest('POST', '/api/problems', {
+        imageUrl: capturedImage,
+        ocrText: ocrText.trim()
+      });
+      return response.json();
+    },
+    onSuccess: (problem) => {
+      // Store problem ID for solution search
+      sessionStorage.setItem('currentProblemId', problem.id);
+      sessionStorage.setItem('ocrText', ocrText);
+      setLocation('/solution-search');
+    },
+    onError: (error) => {
+      console.error('Failed to create problem:', error);
+      toast({
+        title: "Error",
+        description: "Failed to save problem. Please try again.",
+        variant: "destructive"
+      });
+    }
+  });
+
   const handleSearch = () => {
-    // Update session storage with edited text
-    sessionStorage.setItem('ocrText', ocrText);
-    setLocation('/solution-search');
+    if (!user) {
+      toast({
+        title: "Authentication Required",
+        description: "Please log in to save problems and search solutions.",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    if (!ocrText.trim()) {
+      toast({
+        title: "No Text",
+        description: "Please capture or enter problem text before searching.",
+        variant: "destructive"
+      });
+      return;
+    }
+    
+    createProblemMutation.mutate();
   };
 
   return (
@@ -81,17 +131,26 @@ export default function OcrResult() {
         <Button 
           onClick={handleSearch}
           className="w-full py-4 font-semibold"
-          disabled={!ocrText.trim()}
+          disabled={createProblemMutation.isPending || !ocrText.trim()}
           data-testid="search-solutions-button"
         >
-          Search Similar Problems
+{createProblemMutation.isPending ? "Saving Problem..." : "Search Similar Problems"}
         </Button>
 
         {/* Preview Image */}
         <Card className="p-4">
           <h3 className="font-semibold mb-3">Captured Image</h3>
-          <div className="w-full h-32 bg-muted rounded-lg flex items-center justify-center">
-            <span className="text-muted-foreground text-sm">Image preview would appear here</span>
+          <div className="w-full h-32 bg-muted rounded-lg flex items-center justify-center overflow-hidden">
+            {capturedImage ? (
+              <img 
+                src={capturedImage} 
+                alt="Captured problem" 
+                className="max-w-full max-h-full object-contain rounded"
+                data-testid="captured-image"
+              />
+            ) : (
+              <span className="text-muted-foreground text-sm">No image available</span>
+            )}
           </div>
         </Card>
       </div>
