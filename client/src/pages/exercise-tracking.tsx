@@ -18,6 +18,8 @@ export default function ExerciseTracking() {
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [userExerciseId, setUserExerciseId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState("Position yourself in front of the camera");
+  const [countdown, setCountdown] = useState<number | null>(null);
+  const [isResting, setIsResting] = useState(false);
 
   const { data: exercise, isLoading } = useQuery<Exercise>({
     queryKey: ['/api/exercises', exerciseId],
@@ -53,43 +55,70 @@ export default function ExerciseTracking() {
   });
 
   const startExerciseDetection = () => {
-    // Simulate exercise detection
+    // Show countdown before starting
+    let countdownValue = 3;
+    setCountdown(countdownValue);
+    setFeedback("Get ready! Exercise starts in...");
+    
+    const countdownInterval = setInterval(() => {
+      countdownValue--;
+      setCountdown(countdownValue);
+      
+      if (countdownValue <= 0) {
+        clearInterval(countdownInterval);
+        setCountdown(null);
+        setFeedback("Start exercising! Tap the screen when you complete a rep");
+      }
+    }, 1000);
+  };
+  
+  const handleRepComplete = () => {
+    if (!isTracking || isResting) return;
+    
     const feedbackMessages = [
-      "Keep your back straight!",
-      "Great form!",
-      "Lower down more",
-      "Perfect! Keep going!",
-      "Focus on your breathing",
+      "Great rep! Keep it up!",
+      "Perfect form!",
+      "Excellent! Stay focused!",
+      "Nice work! Continue!",
+      "You're doing amazing!",
     ];
-
-    const detectionInterval = setInterval(() => {
-      if (currentReps >= (exercise?.reps || 0)) {
-        clearInterval(detectionInterval);
-        completeExerciseMutation.mutate();
-        return;
+    
+    setCurrentReps(prev => {
+      const newReps = prev + 1;
+      const remaining = (exercise?.reps || 0) - newReps;
+      
+      if (newReps >= (exercise?.reps || 0)) {
+        setFeedback("Exercise complete! Great job!");
+        setTimeout(() => completeExerciseMutation.mutate(), 1000);
+      } else {
+        setFeedback(`${feedbackMessages[Math.floor(Math.random() * feedbackMessages.length)]} ${remaining} reps left!`);
+        
+        // Add rest period every 3 reps
+        if (newReps % 3 === 0) {
+          setIsResting(true);
+          setFeedback("Take a 5 second rest...");
+          setTimeout(() => {
+            setIsResting(false);
+            setFeedback("Ready? Continue exercising!");
+          }, 5000);
+        }
       }
-
-      // Simulate rep detection (in real app, this would be pose detection)
-      if (Math.random() > 0.3) { // 70% chance to increment rep
-        setCurrentReps(prev => {
-          const newReps = prev + 1;
-          if (newReps >= (exercise?.reps || 0)) {
-            clearInterval(detectionInterval);
-            setTimeout(() => completeExerciseMutation.mutate(), 1000);
-          }
-          return newReps;
-        });
-      }
-
-      // Update feedback
-      setFeedback(feedbackMessages[Math.floor(Math.random() * feedbackMessages.length)]);
-    }, 2000);
-
-    return () => clearInterval(detectionInterval);
+      
+      return newReps;
+    });
   };
 
   const handleStartExercise = () => {
     startExerciseMutation.mutate();
+  };
+  
+  const handleResetExercise = () => {
+    setCurrentReps(0);
+    setIsTracking(false);
+    setIsResting(false);
+    setCountdown(null);
+    setFeedback("Position yourself in front of the camera");
+    setUserExerciseId(null);
   };
 
   const progressPercentage = exercise ? (currentReps / exercise.reps) * 100 : 0;
@@ -120,16 +149,39 @@ export default function ExerciseTracking() {
 
   return (
     <div className="min-h-screen max-w-md mx-auto bg-gray-900 relative">
-      {/* Camera Feed Simulation */}
-      <div className="absolute inset-0 camera-overlay">
+      {/* Exercise Area */}
+      <div className="absolute inset-0 bg-gradient-to-br from-blue-600 to-purple-700">
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="text-center">
-            <svg className="w-16 h-16 text-white mb-4 opacity-50 mx-auto" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M12 2C13.1 2 14 2.9 14 4C14 5.1 13.1 6 12 6C10.9 6 10 5.1 10 4C10 2.9 10.9 2 12 2ZM21 9V7L15 4V6L21 9ZM3 9L9 6V4L3 7V9ZM12 22C13.1 22 14 21.1 14 20H10C10 21.1 10.9 22 12 22ZM21 11H3C3 12 4 13 5 13H19C20 13 21 12 21 11Z"/>
-            </svg>
-            <p className="text-white text-sm opacity-75">
-              {isTracking ? "Exercise in progress..." : "Position yourself in front of the camera"}
-            </p>
+            {countdown !== null ? (
+              <div className="text-center">
+                <div className="text-8xl font-bold text-white mb-4 animate-pulse" data-testid="countdown">
+                  {countdown || "GO!"}
+                </div>
+                <p className="text-white text-xl">Get ready to start!</p>
+              </div>
+            ) : (
+              <>
+                <div className="w-32 h-32 bg-white bg-opacity-20 rounded-full flex items-center justify-center mb-6 mx-auto">
+                  <svg className="w-16 h-16 text-white" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M13.5.67s.74 2.65.74 4.8c0 2.06-1.35 3.73-3.41 3.73-2.07 0-3.63-1.67-3.63-3.73l.03-.36C5.21 7.51 4 10.62 4 14c0 4.42 3.58 8 8 8s8-3.58 8-8C20 8.61 17.41 3.8 13.5.67z"/>
+                  </svg>
+                </div>
+                <p className="text-white text-lg mb-8">
+                  {isTracking ? (isResting ? "Take a rest..." : "Tap when you complete a rep!") : "Ready to start exercising?"}
+                </p>
+                {isTracking && (
+                  <Button
+                    onClick={handleRepComplete}
+                    disabled={isResting}
+                    className={`w-32 h-32 rounded-full text-2xl font-bold ${isResting ? 'bg-gray-500' : 'bg-green-500 hover:bg-green-600 animate-pulse'}`}
+                    data-testid="rep-complete-button"
+                  >
+                    {isResting ? "Rest" : "REP!"}
+                  </Button>
+                )}
+              </>
+            )}
           </div>
         </div>
       </div>
@@ -154,12 +206,14 @@ export default function ExerciseTracking() {
           
           {/* Counter */}
           <div className="text-center mb-4">
-            <div className="text-4xl font-bold text-primary" data-testid="rep-count">{currentReps}</div>
-            <div className="text-sm text-gray-600">/ {exercise.reps} reps</div>
+            <div className="text-5xl font-bold text-primary" data-testid="rep-count">{currentReps}</div>
+            <div className="text-lg text-gray-600 font-semibold">/ {exercise.reps} reps</div>
+            <div className="text-sm text-gray-500 mt-1">+{exercise.tokenReward} tokens reward</div>
           </div>
           
           {/* Progress Bar */}
-          <Progress value={progressPercentage} className="mb-4" />
+          <Progress value={progressPercentage} className="mb-4 h-3" />
+          <div className="text-xs text-gray-500 text-center mb-4">{Math.round(progressPercentage)}% complete</div>
           
           {/* Real-time Feedback */}
           <div className="bg-yellow-100 border border-yellow-300 rounded-lg p-3">
@@ -176,25 +230,73 @@ export default function ExerciseTracking() {
       {/* Exercise Guide */}
       <div className="absolute bottom-4 left-4 right-4">
         {!isTracking ? (
-          <div className="glass-effect rounded-2xl p-4 text-center">
-            <h3 className="font-semibold text-gray-800 mb-3">Ready to start?</h3>
-            <Button 
-              onClick={handleStartExercise}
-              className="w-full py-3 font-semibold"
-              disabled={startExerciseMutation.isPending}
-              data-testid="start-tracking-button"
-            >
-              {startExerciseMutation.isPending ? "Starting..." : "Start Exercise"}
-            </Button>
+          <div className="glass-effect rounded-2xl p-4 space-y-4">
+            <div className="text-center">
+              <h3 className="font-semibold text-gray-800 mb-2">Exercise Instructions</h3>
+              <div className="text-sm text-gray-600 space-y-1 mb-4 max-h-16 overflow-y-auto">
+                {exercise.instructions?.map((instruction: string, index: number) => (
+                  <div key={index}>• {instruction}</div>
+                ))}
+              </div>
+            </div>
+            
+            <div className="flex space-x-3">
+              <Button 
+                onClick={handleStartExercise}
+                className="flex-1 bg-gradient-to-r from-green-500 to-blue-500 hover:from-green-600 hover:to-blue-600 text-white py-3 font-semibold"
+                disabled={startExerciseMutation.isPending}
+                data-testid="start-tracking-button"
+              >
+                {startExerciseMutation.isPending ? "Starting..." : "🚀 Start Exercise"}
+              </Button>
+              <Button 
+                onClick={() => setLocation('/exercises')}
+                variant="outline"
+                className="px-6"
+                data-testid="back-to-exercises"
+              >
+                Back
+              </Button>
+            </div>
           </div>
         ) : (
-          <div className="glass-effect rounded-2xl p-4">
-            <h3 className="font-semibold text-gray-800 mb-2">Proper Form</h3>
-            <ul className="text-sm text-gray-600 space-y-1">
-              {exercise.instructions?.map((instruction: string, index: number) => (
-                <li key={index}>• {instruction}</li>
-              ))}
-            </ul>
+          <div className="glass-effect rounded-2xl p-4 space-y-3">
+            <h3 className="font-semibold text-gray-800 mb-2 text-center">Exercise Controls</h3>
+            
+            <div className="flex space-x-2 mb-3">
+              <Button 
+                onClick={handleResetExercise}
+                variant="outline"
+                className="flex-1 text-sm"
+                data-testid="reset-exercise"
+              >
+                🔄 Reset
+              </Button>
+              <Button 
+                onClick={() => setLocation('/exercises')}
+                variant="destructive"
+                className="flex-1 text-sm"
+                data-testid="stop-exercise"
+              >
+                ⏹️ Stop
+              </Button>
+            </div>
+            
+            {/* Quick Stats */}
+            <div className="grid grid-cols-3 gap-2 text-center text-xs">
+              <div className="bg-blue-50 rounded-lg p-2">
+                <div className="font-semibold text-blue-600">{exercise.estimatedTime}</div>
+                <div className="text-gray-500">Duration</div>
+              </div>
+              <div className="bg-green-50 rounded-lg p-2">
+                <div className="font-semibold text-green-600">Level {exercise.difficulty}/3</div>
+                <div className="text-gray-500">Difficulty</div>
+              </div>
+              <div className="bg-yellow-50 rounded-lg p-2">
+                <div className="font-semibold text-yellow-600">+{exercise.tokenReward}</div>
+                <div className="text-gray-500">Tokens</div>
+              </div>
+            </div>
           </div>
         )}
       </div>
