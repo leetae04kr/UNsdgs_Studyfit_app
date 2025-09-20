@@ -1,11 +1,12 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation, useParams } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { ExerciseCompleteModal } from "@/components/exercise-complete-modal";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
 import type { Exercise } from "@shared/schema";
 
 export default function ExerciseTracking() {
@@ -20,9 +21,12 @@ export default function ExerciseTracking() {
   const [feedback, setFeedback] = useState("Position yourself in front of the camera");
   const [countdown, setCountdown] = useState<number | null>(null);
   const [isResting, setIsResting] = useState(false);
+  const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const restTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const { toast } = useToast();
 
   const { data: exercise, isLoading } = useQuery<Exercise>({
-    queryKey: ['/api/exercises', exerciseId],
+    queryKey: [`/api/exercises/${exerciseId}`],
     enabled: !!exerciseId,
   });
 
@@ -38,6 +42,13 @@ export default function ExerciseTracking() {
       setIsTracking(true);
       startExerciseDetection();
     },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to start exercise. Please try again.",
+        variant: "destructive"
+      });
+    },
   });
 
   const completeExerciseMutation = useMutation({
@@ -50,7 +61,16 @@ export default function ExerciseTracking() {
       return response.json();
     },
     onSuccess: () => {
+      // Refresh user data to update token count
+      queryClient.invalidateQueries({ queryKey: ['/api/auth/user'] });
       setShowCompleteModal(true);
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to complete exercise. Please try again.",
+        variant: "destructive"
+      });
     },
   });
 
@@ -60,12 +80,15 @@ export default function ExerciseTracking() {
     setCountdown(countdownValue);
     setFeedback("Get ready! Exercise starts in...");
     
-    const countdownInterval = setInterval(() => {
+    countdownIntervalRef.current = setInterval(() => {
       countdownValue--;
       setCountdown(countdownValue);
       
       if (countdownValue <= 0) {
-        clearInterval(countdownInterval);
+        if (countdownIntervalRef.current) {
+          clearInterval(countdownIntervalRef.current);
+          countdownIntervalRef.current = null;
+        }
         setCountdown(null);
         setFeedback("Start exercising! Tap the screen when you complete a rep");
       }
@@ -97,9 +120,10 @@ export default function ExerciseTracking() {
         if (newReps % 3 === 0) {
           setIsResting(true);
           setFeedback("Take a 5 second rest...");
-          setTimeout(() => {
+          restTimeoutRef.current = setTimeout(() => {
             setIsResting(false);
             setFeedback("Ready? Continue exercising!");
+            restTimeoutRef.current = null;
           }, 5000);
         }
       }
@@ -113,6 +137,16 @@ export default function ExerciseTracking() {
   };
   
   const handleResetExercise = () => {
+    // Clear all timers
+    if (countdownIntervalRef.current) {
+      clearInterval(countdownIntervalRef.current);
+      countdownIntervalRef.current = null;
+    }
+    if (restTimeoutRef.current) {
+      clearTimeout(restTimeoutRef.current);
+      restTimeoutRef.current = null;
+    }
+    
     setCurrentReps(0);
     setIsTracking(false);
     setIsResting(false);
@@ -120,6 +154,18 @@ export default function ExerciseTracking() {
     setFeedback("Position yourself in front of the camera");
     setUserExerciseId(null);
   };
+  
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (countdownIntervalRef.current) {
+        clearInterval(countdownIntervalRef.current);
+      }
+      if (restTimeoutRef.current) {
+        clearTimeout(restTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const progressPercentage = exercise ? (currentReps / exercise.reps) * 100 : 0;
 
@@ -250,7 +296,7 @@ export default function ExerciseTracking() {
                 {startExerciseMutation.isPending ? "Starting..." : "🚀 Start Exercise"}
               </Button>
               <Button 
-                onClick={() => setLocation('/exercises')}
+                onClick={() => setLocation('/exercise-selection')}
                 variant="outline"
                 className="px-6"
                 data-testid="back-to-exercises"
@@ -273,7 +319,7 @@ export default function ExerciseTracking() {
                 🔄 Reset
               </Button>
               <Button 
-                onClick={() => setLocation('/exercises')}
+                onClick={() => setLocation('/exercise-selection')}
                 variant="destructive"
                 className="flex-1 text-sm"
                 data-testid="stop-exercise"
