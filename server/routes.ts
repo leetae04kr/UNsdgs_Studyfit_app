@@ -204,7 +204,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Exercise routes
   app.get('/api/exercises', async (req, res) => {
     try {
+      console.log('[EXERCISE API] GET /api/exercises called');
       const exercises = await storage.getAllExercises();
+      console.log('[EXERCISE API] Found exercises:', exercises.length);
       res.json(exercises);
     } catch (error) {
       console.error("Error fetching exercises:", error);
@@ -227,12 +229,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/exercises/start', async (req: any, res) => {
     try {
+      console.log('[EXERCISE API] POST /api/exercises/start called');
+      console.log('[EXERCISE API] Request body:', JSON.stringify(req.body, null, 2));
+      
       const { userId, exerciseId } = req.body;
       
       if (!userId) {
+        console.log('[EXERCISE API] Missing userId');
         return res.status(400).json({ message: "userId is required" });
       }
       if (!exerciseId) {
+        console.log('[EXERCISE API] Missing exerciseId');
         return res.status(400).json({ message: "exerciseId is required" });
       }
       
@@ -241,6 +248,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         exerciseId,
       });
       
+      console.log('[EXERCISE API] Created user exercise:', userExercise);
       res.json(userExercise);
     } catch (error) {
       console.error("Error starting exercise:", error);

@@ -37,7 +37,16 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  console.log(`[SERVER] Starting server in ${process.env.NODE_ENV || 'development'} mode`);
+  
+  // Add API route protection middleware before registering routes
+  app.use('/api/*', (req, res, next) => {
+    console.log(`[API] ${req.method} ${req.originalUrl} - API route matched`);
+    next();
+  });
+  
   const server = await registerRoutes(app);
+  console.log('[SERVER] API routes registered');
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
@@ -50,11 +59,14 @@ app.use((req, res, next) => {
   // importantly only setup vite in development and after
   // setting up all the other routes so the catch-all route
   // doesn't interfere with the other routes
-  if (app.get("env") === "development") {
+  if (process.env.NODE_ENV === "development") {
+    console.log('[SERVER] Setting up Vite for development');
     await setupVite(app, server);
   } else {
+    console.log('[SERVER] Setting up static file serving for production');
     serveStatic(app);
   }
+  console.log('[SERVER] Frontend setup complete');
 
   // ALWAYS serve the app on the port specified in the environment variable PORT
   // Other ports are firewalled. Default to 5000 if not specified.
