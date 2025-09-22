@@ -46,6 +46,18 @@ export default function Home() {
     }
   }, [user?.tokens]);
 
+  // Admin seeding function
+  const handleSeedData = async () => {
+    try {
+      const response = await fetch('/api/seed', { method: 'POST' });
+      const result = await response.text();
+      alert('데이터 시딩 완료!\n\n' + result);
+      window.location.reload(); // Refresh to see new data
+    } catch (error) {
+      alert('시딩 실패: ' + error);
+    }
+  };
+
   return (
     <div className="min-h-screen max-w-md mx-auto bg-background">
       {/* Header */}
@@ -158,6 +170,25 @@ export default function Home() {
             </div>
           </Card>
         )}
+
+        {/* Admin Seeding Button */}
+        <Card className="p-4 border-dashed border-gray-300">
+          <div className="text-center">
+            <h3 className="font-semibold mb-2 text-sm text-gray-600">관리자 도구</h3>
+            <Button 
+              onClick={handleSeedData}
+              variant="outline"
+              size="sm"
+              className="w-full"
+              data-testid="admin-seed-button"
+            >
+              🌱 데이터베이스 시딩
+            </Button>
+            <p className="text-xs text-gray-500 mt-2">
+              운동 및 솔루션 데이터를 초기화합니다
+            </p>
+          </div>
+        </Card>
       </div>
     </div>
   );

@@ -1,6 +1,8 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
+import { db } from "./db";
+import { exercises } from "@shared/schema";
 
 const app = express();
 app.use(express.json());
@@ -47,6 +49,32 @@ app.use((req, res, next) => {
   
   const server = await registerRoutes(app);
   console.log('[SERVER] API routes registered');
+
+  // Auto-seed database on startup if empty
+  try {
+    const existingExercises = await db.select().from(exercises).limit(1);
+    if (existingExercises.length === 0) {
+      console.log('[AUTO-SEED] No exercises found, triggering auto-seed...');
+      
+      // Call the seed endpoint internally via HTTP request
+      setTimeout(async () => {
+        try {
+          const response = await fetch('http://localhost:5000/api/seed', { method: 'POST' });
+          if (response.ok) {
+            console.log('[AUTO-SEED] Database seeded successfully');
+          } else {
+            console.error('[AUTO-SEED] Failed to seed database:', await response.text());
+          }
+        } catch (error) {
+          console.error('[AUTO-SEED] Error during auto-seed:', error);
+        }
+      }, 1000); // Wait 1 second for server to be fully ready
+    } else {
+      console.log(`[AUTO-SEED] Found ${existingExercises.length} exercise(s), skipping auto-seed`);
+    }
+  } catch (error) {
+    console.error('[AUTO-SEED] Error checking database:', error);
+  }
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;

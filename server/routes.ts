@@ -135,7 +135,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const { userId, solutionId, problemId } = validationResult.data;
       
-      const success = await storage.purchaseSolution(userId, solutionId, problemId);
+      const success = await storage.purchaseSolution(userId, solutionId, problemId || undefined);
       if (success) {
         const user = await storage.getUser(userId);
         res.json({ success: true, user });
@@ -499,7 +499,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // GET endpoint for easy browser access
+  app.get('/api/seed', async (req, res) => {
+    return seedDatabase(req, res);
+  });
+
+  // POST endpoint for programmatic access
   app.post('/api/seed', async (req, res) => {
+    return seedDatabase(req, res);
+  });
+
+  // Shared seeding function (exported for auto-seed)
+  async function seedDatabase(req?: any, res?: any) {
     try {
       // Seed solutions
       const solutions = [
@@ -699,12 +710,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       }
 
-      res.json({ message: "Seed data inserted successfully" });
+      if (res) {
+        res.json({ message: "Seed data inserted successfully" });
+      }
+      return { success: true, message: "Seed data inserted successfully" };
     } catch (error) {
       console.error("Error seeding data:", error);
-      res.status(500).json({ message: "Failed to seed data" });
+      if (res) {
+        res.status(500).json({ message: "Failed to seed data" });
+      }
+      throw error;
     }
-  });
+  }
+
 
   // Statistics endpoint
   app.post('/api/statistics', async (req: any, res) => {
