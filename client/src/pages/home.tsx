@@ -86,14 +86,16 @@ export default function Home() {
               </Card>
             </Link>
             
-            <Card className="p-4 text-center cursor-pointer hover:shadow-md transition-shadow" data-testid="history-card">
-              <div className="w-12 h-12 mx-auto mb-2 bg-purple-500 rounded-xl flex items-center justify-center">
-                <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M13 3C8.58 3 5 6.58 5 11H1L5.7 15.7C5.89 15.89 6.11 16 6.34 16S6.79 15.89 6.98 15.7L12 10.7V5H10V9.41L7.71 11.71C7.32 12.1 6.68 12.1 6.29 11.71S5.9 10.68 6.29 10.29L8.59 8H5C5 6.58 6.42 5 8 5V3H13Z"/>
-                </svg>
-              </div>
-              <p className="text-sm font-medium">History</p>
-            </Card>
+            <Link href="/statistics">
+              <Card className="p-4 text-center cursor-pointer hover:shadow-md transition-shadow" data-testid="statistics-card">
+                <div className="w-12 h-12 mx-auto mb-2 bg-purple-500 rounded-xl flex items-center justify-center">
+                  <svg className="w-6 h-6 text-white" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/>
+                  </svg>
+                </div>
+                <p className="text-sm font-medium">Stats</p>
+              </Card>
+            </Link>
           </div>
         </div>
 

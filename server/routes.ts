@@ -216,10 +216,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get('/api/exercises/:id', async (req, res) => {
     try {
+      console.log('[EXERCISE API] GET /api/exercises/:id called for ID:', req.params.id);
       const exercise = await storage.getExercise(req.params.id);
       if (!exercise) {
+        console.log('[EXERCISE API] Exercise not found for ID:', req.params.id);
         return res.status(404).json({ message: "Exercise not found" });
       }
+      console.log('[EXERCISE API] Found exercise:', JSON.stringify(exercise, null, 2));
       res.json(exercise);
     } catch (error) {
       console.error("Error fetching exercise:", error);
@@ -258,6 +261,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/exercises/complete', async (req: any, res) => {
     try {
+      console.log('[EXERCISE API] POST /api/exercises/complete called');
+      console.log('[EXERCISE API] Request body:', JSON.stringify(req.body, null, 2));
+      
       // Extract userId from request body
       const { userId, ...exerciseData } = req.body;
       if (!userId) {
@@ -310,6 +316,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
 
         const tokensEarned = exercise[0].tokenReward; // Server-computed tokens
+        console.log('[EXERCISE API] Tokens to be earned:', tokensEarned);
 
         // Update the completed user exercise with tokens earned
         await tx
@@ -318,6 +325,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             tokensEarned,
           })
           .where(eq(schema.userExercises.id, userExerciseId));
+
+        console.log('[EXERCISE API] Updated user exercise with tokens earned');
 
         // Update user tokens atomically
         await tx
@@ -328,10 +337,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
           })
           .where(eq(schema.users.id, userId));
 
+        console.log('[EXERCISE API] Updated user tokens atomically');
+
         return { tokensEarned, exercise: completionResult[0] };
       });
 
       const user = await storage.getUser(userId);
+      console.log('[EXERCISE API] Final user data:', { id: user?.id, tokens: user?.tokens });
+      console.log('[EXERCISE API] Response:', { tokensEarned: result.tokensEarned, userTokens: user?.tokens });
+      
       res.json({ exercise: result.exercise, tokensEarned: result.tokensEarned, user });
     } catch (error: any) {
       console.error("Error completing exercise:", error);
@@ -518,50 +532,291 @@ export async function registerRoutes(app: Express): Promise<Server> {
         },
       ];
 
-      // Seed exercises
+      // Seed exercises - Expanded collection with Upper/Lower/Core categories
       const exercises = [
+        // Upper Body Exercises
         {
           name: "Push-ups",
-          description: "10 reps completed",
+          description: "Classic upper body strengthening exercise",
           reps: 10,
           tokenReward: 10,
           difficulty: 1,
           estimatedTime: "2-3 minutes",
-          instructions: ["Place hands shoulder-width apart", "Keep body in straight line", "Lower chest to floor"],
+          instructions: ["Place hands shoulder-width apart", "Keep body in straight line", "Lower chest to floor", "Push back up maintaining form"],
         },
         {
-          name: "Squats",
-          description: "15 reps completed",
+          name: "Wall Push-ups",
+          description: "Beginner-friendly upper body exercise",
           reps: 15,
+          tokenReward: 8,
+          difficulty: 1,
+          estimatedTime: "2-3 minutes",
+          instructions: ["Stand arm's length from wall", "Place palms flat against wall", "Lean in and push back out", "Keep body straight throughout"],
+        },
+        {
+          name: "Pike Push-ups",
+          description: "Advanced shoulder and tricep exercise",
+          reps: 8,
+          tokenReward: 15,
+          difficulty: 3,
+          estimatedTime: "3-4 minutes",
+          instructions: ["Start in downward dog position", "Walk feet closer to hands", "Lower head toward floor", "Push back up focusing on shoulders"],
+        },
+        
+        // Lower Body Exercises
+        {
+          name: "Squats",
+          description: "Fundamental lower body strengthening",
+          reps: 15,
+          tokenReward: 12,
+          difficulty: 2,
+          estimatedTime: "3-4 minutes",
+          instructions: ["Stand with feet shoulder-width apart", "Lower down as if sitting", "Keep knees behind toes", "Drive through heels to stand"],
+        },
+        {
+          name: "Lunges",
+          description: "Single-leg strength and balance exercise",
+          reps: 10,
+          tokenReward: 14,
+          difficulty: 2,
+          estimatedTime: "4-5 minutes",
+          instructions: ["Step forward into lunge position", "Lower back knee toward ground", "Keep front knee over ankle", "Alternate legs each rep"],
+        },
+        {
+          name: "Calf Raises",
+          description: "Lower leg strengthening exercise",
+          reps: 20,
+          tokenReward: 8,
+          difficulty: 1,
+          estimatedTime: "2-3 minutes",
+          instructions: ["Stand with feet hip-width apart", "Rise up onto toes", "Hold briefly at the top", "Lower slowly with control"],
+        },
+        {
+          name: "Jump Squats",
+          description: "Explosive lower body power exercise",
+          reps: 12,
+          tokenReward: 18,
+          difficulty: 3,
+          estimatedTime: "3-4 minutes",
+          instructions: ["Start in squat position", "Jump up explosively", "Land softly back in squat", "Maintain good form throughout"],
+        },
+        
+        // Core Exercises
+        {
+          name: "Plank",
+          description: "Core stability and strength hold",
+          reps: 30,
           tokenReward: 15,
           difficulty: 2,
           estimatedTime: "3-4 minutes",
-          instructions: ["Stand with feet shoulder-width apart", "Lower down as if sitting", "Keep knees behind toes"],
+          instructions: ["Start in push-up position", "Lower to forearms", "Keep body straight", "Hold for specified seconds"],
         },
         {
-          name: "Jumping Jacks",
-          description: "20 reps completed",
+          name: "Mountain Climbers",
+          description: "Dynamic core and cardio exercise",
           reps: 20,
-          tokenReward: 20,
+          tokenReward: 16,
+          difficulty: 2,
+          estimatedTime: "3-4 minutes",
+          instructions: ["Start in plank position", "Bring one knee to chest", "Quickly switch legs", "Keep hips level throughout"],
+        },
+        {
+          name: "Russian Twists",
+          description: "Rotational core strengthening",
+          reps: 16,
+          tokenReward: 12,
+          difficulty: 2,
+          estimatedTime: "3-4 minutes",
+          instructions: ["Sit with knees bent", "Lean back slightly", "Rotate torso side to side", "Keep core engaged throughout"],
+        },
+        
+        // Full Body & Cardio
+        {
+          name: "Jumping Jacks",
+          description: "Full body cardio and coordination",
+          reps: 20,
+          tokenReward: 10,
+          difficulty: 1,
+          estimatedTime: "2-3 minutes",
+          instructions: ["Start with feet together", "Jump while spreading legs", "Raise arms overhead", "Return to starting position"],
+        },
+        {
+          name: "Burpees",
+          description: "Ultimate full-body conditioning exercise",
+          reps: 8,
+          tokenReward: 25,
           difficulty: 3,
           estimatedTime: "4-5 minutes",
-          instructions: ["Start with feet together", "Jump while spreading legs", "Raise arms overhead"],
+          instructions: ["Start standing", "Drop to squat, hands on floor", "Jump feet back to plank", "Do push-up, jump feet forward, jump up"],
+        },
+        {
+          name: "High Knees",
+          description: "Cardio exercise for leg strength and endurance",
+          reps: 30,
+          tokenReward: 12,
+          difficulty: 2,
+          estimatedTime: "3-4 minutes",
+          instructions: ["Run in place", "Bring knees up to waist height", "Pump arms naturally", "Land on balls of feet"],
+        },
+        
+        // Flexibility & Recovery
+        {
+          name: "Arm Circles",
+          description: "Shoulder mobility and warm-up exercise",
+          reps: 20,
+          tokenReward: 6,
+          difficulty: 1,
+          estimatedTime: "2-3 minutes",
+          instructions: ["Extend arms to sides", "Make small circles forward", "Then make circles backward", "Keep movements controlled"],
+        },
+        {
+          name: "Leg Swings",
+          description: "Hip mobility and warm-up exercise",
+          reps: 15,
+          tokenReward: 7,
+          difficulty: 1,
+          estimatedTime: "2-3 minutes",
+          instructions: ["Hold onto wall for support", "Swing one leg forward and back", "Keep movements controlled", "Switch legs after completing reps"],
         },
       ];
 
-      // Insert seed data
+      // Insert seed data safely (avoid duplicates)
       for (const solution of solutions) {
-        await db.insert(schema.solutions).values(solution);
+        try {
+          await db.insert(schema.solutions).values(solution);
+        } catch (error) {
+          // Skip if already exists
+          console.log('Solution already exists, skipping:', solution.title);
+        }
       }
 
       for (const exercise of exercises) {
-        await db.insert(schema.exercises).values(exercise);
+        try {
+          await db.insert(schema.exercises).values(exercise);
+        } catch (error) {
+          // Skip if already exists
+          console.log('Exercise already exists, skipping:', exercise.name);
+        }
       }
 
       res.json({ message: "Seed data inserted successfully" });
     } catch (error) {
       console.error("Error seeding data:", error);
       res.status(500).json({ message: "Failed to seed data" });
+    }
+  });
+
+  // Statistics endpoint
+  app.post('/api/statistics', async (req: any, res) => {
+    try {
+      console.log('[STATISTICS API] POST /api/statistics called');
+      console.log('[STATISTICS API] Request body:', JSON.stringify(req.body, null, 2));
+      
+      const validationResult = userIdSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ 
+          message: "Invalid user ID", 
+          errors: validationResult.error.errors 
+        });
+      }
+      
+      const { userId } = validationResult.data;
+      console.log('[STATISTICS API] Processing statistics for userId:', userId);
+      
+      // Get user info
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+
+      // Get exercise history (last 7 days)
+      const exerciseHistory = await db
+        .select({
+          date: sql<string>`DATE(${schema.userExercises.completedAt})`.as('date'),
+          exercisesCompleted: sql<number>`COUNT(*)`.as('exercises_completed'),
+          tokensEarned: sql<number>`SUM(${schema.userExercises.tokensEarned})`.as('tokens_earned'),
+        })
+        .from(schema.userExercises)
+        .where(
+          and(
+            eq(schema.userExercises.userId, userId),
+            eq(schema.userExercises.completed, true),
+            sql`${schema.userExercises.completedAt} >= NOW() - INTERVAL '7 days'`
+          )
+        )
+        .groupBy(sql`DATE(${schema.userExercises.completedAt})`)
+        .orderBy(sql`DATE(${schema.userExercises.completedAt})`);
+
+      // Get token spending breakdown
+      const solutionSpending = await db
+        .select({
+          category: sql<string>`'Solutions'`.as('category'),
+          amount: sql<number>`SUM(${schema.userSolutions.tokensSpent})`.as('amount'),
+          count: sql<number>`COUNT(*)`.as('count'),
+        })
+        .from(schema.userSolutions)
+        .where(eq(schema.userSolutions.userId, userId));
+
+      const shopSpending = await db
+        .select({
+          category: sql<string>`'Shop Items'`.as('category'),
+          amount: sql<number>`SUM(${schema.shopPurchases.tokensSpent})`.as('amount'),
+          count: sql<number>`COUNT(*)`.as('count'),
+        })
+        .from(schema.shopPurchases)
+        .where(eq(schema.shopPurchases.userId, userId));
+
+      // Get exercise types performance
+      const exerciseTypes = await db
+        .select({
+          name: schema.exercises.name,
+          completed: sql<number>`COUNT(${schema.userExercises.id})`.as('completed'),
+          tokensEarned: sql<number>`SUM(${schema.userExercises.tokensEarned})`.as('tokens_earned'),
+        })
+        .from(schema.userExercises)
+        .innerJoin(schema.exercises, eq(schema.userExercises.exerciseId, schema.exercises.id))
+        .where(
+          and(
+            eq(schema.userExercises.userId, userId),
+            eq(schema.userExercises.completed, true)
+          )
+        )
+        .groupBy(schema.exercises.id, schema.exercises.name)
+        .orderBy(sql`COUNT(${schema.userExercises.id}) DESC`);
+
+      const tokenSpending = [
+        ...(solutionSpending[0]?.amount > 0 ? [solutionSpending[0]] : []),
+        ...(shopSpending[0]?.amount > 0 ? [shopSpending[0]] : [])
+      ];
+
+      const statistics = {
+        user: {
+          tokens: user.tokens,
+          totalExercises: user.totalExercises,
+          totalProblems: user.totalProblems,
+          streak: user.streak,
+        },
+        exerciseHistory: exerciseHistory.map(item => ({
+          date: item.date,
+          exercisesCompleted: Number(item.exercisesCompleted),
+          tokensEarned: Number(item.tokensEarned || 0),
+        })),
+        tokenSpending: tokenSpending.map(item => ({
+          category: item.category,
+          amount: Number(item.amount || 0),
+          count: Number(item.count),
+        })),
+        exerciseTypes: exerciseTypes.map(item => ({
+          name: item.name,
+          completed: Number(item.completed),
+          tokensEarned: Number(item.tokensEarned || 0),
+        })),
+      };
+
+      res.json(statistics);
+    } catch (error) {
+      console.error("Error fetching statistics:", error);
+      res.status(500).json({ message: "Failed to fetch statistics" });
     }
   });
 

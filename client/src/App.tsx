@@ -13,6 +13,7 @@ import ExerciseTracking from "@/pages/exercise-tracking";
 import Profile from "@/pages/profile";
 import TokenShop from "@/pages/token-shop";
 import SolutionView from "@/pages/solution-view";
+import Statistics from "@/pages/statistics";
 
 function Router() {
   return (
@@ -26,6 +27,7 @@ function Router() {
       <Route path="/exercise-tracking/:id" component={ExerciseTracking} />
       <Route path="/profile" component={Profile} />
       <Route path="/token-shop" component={TokenShop} />
+      <Route path="/statistics" component={Statistics} />
       <Route component={NotFound} />
     </Switch>
   );
