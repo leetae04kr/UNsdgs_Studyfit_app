@@ -24,6 +24,7 @@ export default function ExerciseTracking() {
   const [isResting, setIsResting] = useState(false);
   const [repBurstKey, setRepBurstKey] = useState(0); // For triggering rep animation
   const [showTokenFlyup, setShowTokenFlyup] = useState(false);
+  const [showConfetti, setShowConfetti] = useState(false);
   const [hasCompleted, setHasCompleted] = useState(false); // Prevent duplicate completion
   const completingRef = useRef(false); // Prevent race conditions
   const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -148,8 +149,21 @@ export default function ExerciseTracking() {
         setHasCompleted(true);
         setIsTracking(false);
         setFeedback("Exercise complete! Great job!");
-        vibrate([200, 100, 200]); // Completion celebration
+        // Trigger completion celebration effects
         setShowTokenFlyup(true);
+        setShowConfetti(true);
+        
+        // Play success sound
+        try {
+          const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhCy+Xxe3PeDQHLWu99eWJOwglhMr08mA6Aw==');
+          audio.volume = 0.3;
+          audio.play().catch(() => {}); // Ignore if autoplay blocked
+        } catch (error) {
+          // Ignore audio errors
+        }
+        
+        // Haptic feedback
+        vibrate([200, 100, 200]); // Completion celebration
         
         // Clear all timers
         if (restTimeoutRef.current) {
@@ -161,9 +175,10 @@ export default function ExerciseTracking() {
         completionTimeoutRef.current = setTimeout(() => {
           if (mountedRef.current) {
             setShowTokenFlyup(false);
+            setShowConfetti(false);
             completeExerciseMutation.mutate();
           }
-        }, 2000);
+        }, 3000); // Extended to 3 seconds for confetti
       } else {
         setFeedback(`${feedbackMessages[Math.floor(Math.random() * feedbackMessages.length)]} ${remaining} reps left!`);
         
@@ -209,6 +224,7 @@ export default function ExerciseTracking() {
     setCountdown(null);
     setHasCompleted(false);
     setShowTokenFlyup(false);
+    setShowConfetti(false);
     completingRef.current = false; // Reset completion guard
     setFeedback("Position yourself in front of the camera");
     setUserExerciseId(null);
@@ -352,6 +368,39 @@ export default function ExerciseTracking() {
                         </AnimatePresence>
                       </motion.button>
                       
+                      {/* Confetti celebration */}
+                      <AnimatePresence>
+                        {showConfetti && (
+                          <div className="absolute inset-0 pointer-events-none">
+                            {Array.from({ length: 30 }).map((_, i) => (
+                              <motion.div
+                                key={i}
+                                initial={{ 
+                                  x: Math.random() * 200 - 100,
+                                  y: -20,
+                                  rotate: Math.random() * 360
+                                }}
+                                animate={{ 
+                                  y: 300,
+                                  x: Math.random() * 400 - 200,
+                                  rotate: Math.random() * 360 + 360
+                                }}
+                                transition={{ 
+                                  duration: 3,
+                                  delay: Math.random() * 0.5,
+                                  ease: "linear"
+                                }}
+                                className={`absolute w-2 h-2 ${
+                                  ['bg-yellow-400', 'bg-pink-400', 'bg-blue-400', 'bg-green-400', 'bg-purple-400', 'bg-red-400'][
+                                    Math.floor(Math.random() * 6)
+                                  ]
+                                } rounded-full`}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </AnimatePresence>
+
                       {/* Token flyup animation */}
                       <AnimatePresence>
                         {showTokenFlyup && exercise && (
