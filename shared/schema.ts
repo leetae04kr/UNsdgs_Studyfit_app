@@ -1,4 +1,4 @@
-import { sql } from 'drizzle-orm';
+import { sql } from "drizzle-orm";
 import {
   index,
   jsonb,
@@ -26,7 +26,9 @@ export const sessions = pgTable(
 
 // User storage table - mandatory for Replit Auth
 export const users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
   email: varchar("email").unique(),
   firstName: varchar("first_name"),
   lastName: varchar("last_name"),
@@ -40,15 +42,21 @@ export const users = pgTable("users", {
 });
 
 export const problems = pgTable("problems", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  userId: varchar("user_id")
+    .notNull()
+    .references(() => users.id),
   imageUrl: text("image_url"),
   ocrText: text("ocr_text").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
 export const solutions = pgTable("solutions", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
   title: text("title").notNull(),
   description: text("description").notNull(),
   difficulty: varchar("difficulty").notNull(), // 'beginner', 'intermediate', 'advanced'
@@ -60,7 +68,9 @@ export const solutions = pgTable("solutions", {
 });
 
 export const exercises = pgTable("exercises", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
   description: text("description").notNull(),
   reps: integer("reps").notNull(),
@@ -72,9 +82,15 @@ export const exercises = pgTable("exercises", {
 });
 
 export const userExercises = pgTable("user_exercises", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id),
-  exerciseId: varchar("exercise_id").notNull().references(() => exercises.id),
+  id: varchar("id")
+    .primaryKey()
+    .default(sql`gen_random_uuid()`),
+  userId: varchar("user_id")
+    .notNull()
+    .references(() => users.id),
+  exerciseId: varchar("exercise_id")
+    .notNull()
+    .references(() => exercises.id),
   completed: boolean("completed").default(false).notNull(),
   repsCompleted: integer("reps_completed").default(0).notNull(),
   tokensEarned: integer("tokens_earned").default(0).notNull(),
@@ -82,27 +98,51 @@ export const userExercises = pgTable("user_exercises", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const userSolutions = pgTable("user_solutions", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id),
-  solutionId: varchar("solution_id").notNull().references(() => solutions.id),
-  problemId: varchar("problem_id").references(() => problems.id),
-  tokensSpent: integer("tokens_spent").notNull(),
-  accessedAt: timestamp("accessed_at").defaultNow(),
-}, (table) => ({
-  userSolutionUnique: unique("user_solutions_user_solution_unique").on(table.userId, table.solutionId),
-}));
+export const userSolutions = pgTable(
+  "user_solutions",
+  {
+    id: varchar("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    userId: varchar("user_id")
+      .notNull()
+      .references(() => users.id),
+    solutionId: varchar("solution_id")
+      .notNull()
+      .references(() => solutions.id),
+    problemId: varchar("problem_id").references(() => problems.id),
+    tokensSpent: integer("tokens_spent").notNull(),
+    accessedAt: timestamp("accessed_at").defaultNow(),
+  },
+  (table) => ({
+    userSolutionUnique: unique("user_solutions_user_solution_unique").on(
+      table.userId,
+      table.solutionId,
+    ),
+  }),
+);
 
-export const shopPurchases = pgTable("shop_purchases", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  userId: varchar("user_id").notNull().references(() => users.id),
-  itemId: varchar("item_id").notNull(),
-  itemTitle: text("item_title").notNull(),
-  tokensSpent: integer("tokens_spent").notNull(),
-  purchasedAt: timestamp("purchased_at").defaultNow(),
-}, (table) => ({
-  userItemUnique: unique("shop_purchases_user_item_unique").on(table.userId, table.itemId),
-}));
+export const shopPurchases = pgTable(
+  "shop_purchases",
+  {
+    id: varchar("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    userId: varchar("user_id")
+      .notNull()
+      .references(() => users.id),
+    itemId: varchar("item_id").notNull(),
+    itemTitle: text("item_title").notNull(),
+    tokensSpent: integer("tokens_spent").notNull(),
+    purchasedAt: timestamp("purchased_at").defaultNow(),
+  },
+  (table) => ({
+    userItemUnique: unique("shop_purchases_user_item_unique").on(
+      table.userId,
+      table.itemId,
+    ),
+  }),
+);
 
 // Insert schemas
 export const insertUserSchema = createInsertSchema(users).omit({
