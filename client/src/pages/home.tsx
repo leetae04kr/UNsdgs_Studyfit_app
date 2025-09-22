@@ -2,10 +2,49 @@ import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Progress } from "@/components/ui/progress";
 import { useAuth } from "@/hooks/useAuth";
+import { motion, AnimatePresence } from "framer-motion";
+import { useState, useEffect, useRef } from "react";
 
 export default function Home() {
   const { user } = useAuth();
+  const [tokenIncrease, setTokenIncrease] = useState(0);
+  const [showTokenIncrease, setShowTokenIncrease] = useState(false);
+  const [tokenPulse, setTokenPulse] = useState(false);
+  const previousTokensRef = useRef(user?.tokens || 0);
+  
+  // Calculate user level and progress
+  const userLevel = Math.floor((user?.tokens || 0) / 100) + 1;
+  const tokensInCurrentLevel = (user?.tokens || 0) % 100;
+  const progressToNextLevel = tokensInCurrentLevel;
+  
+  // Check for reduced motion preference
+  const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  
+  // Detect token increases and trigger animations
+  useEffect(() => {
+    if (user?.tokens && user.tokens > previousTokensRef.current) {
+      const increase = user.tokens - previousTokensRef.current;
+      setTokenIncrease(increase);
+      setShowTokenIncrease(true);
+      setTokenPulse(true);
+      
+      // Hide the increase animation after 2 seconds
+      setTimeout(() => {
+        setShowTokenIncrease(false);
+      }, 2000);
+      
+      // Stop pulse after 1 second
+      setTimeout(() => {
+        setTokenPulse(false);
+      }, 1000);
+    }
+    
+    if (user?.tokens !== undefined) {
+      previousTokensRef.current = user.tokens;
+    }
+  }, [user?.tokens]);
 
   return (
     <div className="min-h-screen max-w-md mx-auto bg-background">
