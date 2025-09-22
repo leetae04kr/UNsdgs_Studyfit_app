@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useLocation, useParams } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { ExerciseCompleteModal } from "@/components/exercise-complete-modal";
@@ -21,9 +22,25 @@ export default function ExerciseTracking() {
   const [feedback, setFeedback] = useState("Position yourself in front of the camera");
   const [countdown, setCountdown] = useState<number | null>(null);
   const [isResting, setIsResting] = useState(false);
+  const [repBurstKey, setRepBurstKey] = useState(0); // For triggering rep animation
+  const [showTokenFlyup, setShowTokenFlyup] = useState(false);
+  const [hasCompleted, setHasCompleted] = useState(false); // Prevent duplicate completion
+  const completingRef = useRef(false); // Prevent race conditions
   const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const restTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const completionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const mountedRef = useRef(true); // Track component mount state
   const { toast } = useToast();
+
+  // Check for reduced motion preference
+  const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // Haptic feedback helper
+  const vibrate = (pattern: number | number[] = 50) => {
+    if ('vibrate' in navigator) {
+      navigator.vibrate(pattern);
+    }
+  };
 
   const { data: exercise, isLoading } = useQuery<Exercise>({
     queryKey: [`/api/exercises/${exerciseId}`],
@@ -81,24 +98,37 @@ export default function ExerciseTracking() {
     let countdownValue = 3;
     setCountdown(countdownValue);
     setFeedback("Get ready! Exercise starts in...");
+    vibrate(100); // Initial vibration
     
     countdownIntervalRef.current = setInterval(() => {
       countdownValue--;
       setCountdown(countdownValue);
+      
+      if (countdownValue > 0) {
+        vibrate(100); // Vibrate on each count
+      } else if (countdownValue === 0) {
+        vibrate([100, 50, 100]); // Special pattern for GO!
+      }
       
       if (countdownValue <= 0) {
         if (countdownIntervalRef.current) {
           clearInterval(countdownIntervalRef.current);
           countdownIntervalRef.current = null;
         }
-        setCountdown(null);
-        setFeedback("Start exercising! Tap the screen when you complete a rep");
+        setTimeout(() => {
+          setCountdown(null);
+          setFeedback("Start exercising! Tap the screen when you complete a rep");
+        }, 1000); // Show "GO!" for 1 second
       }
     }, 1000);
   };
   
   const handleRepComplete = () => {
-    if (!isTracking || isResting) return;
+    if (!isTracking || isResting || hasCompleted || completingRef.current) return;
+    
+    // Haptic feedback and animation
+    vibrate(80);
+    setRepBurstKey(prev => prev + 1); // Trigger burst animation
     
     const feedbackMessages = [
       "Great rep! Keep it up!",
@@ -112,9 +142,28 @@ export default function ExerciseTracking() {
       const newReps = prev + 1;
       const remaining = (exercise?.reps || 0) - newReps;
       
-      if (newReps >= (exercise?.reps || 0)) {
+      if (newReps >= (exercise?.reps || 0) && !completingRef.current) {
+        // Immediately set completion guard to prevent race conditions
+        completingRef.current = true;
+        setHasCompleted(true);
+        setIsTracking(false);
         setFeedback("Exercise complete! Great job!");
-        setTimeout(() => completeExerciseMutation.mutate(), 1000);
+        vibrate([200, 100, 200]); // Completion celebration
+        setShowTokenFlyup(true);
+        
+        // Clear all timers
+        if (restTimeoutRef.current) {
+          clearTimeout(restTimeoutRef.current);
+          restTimeoutRef.current = null;
+        }
+        
+        // Complete exercise only once after animation
+        completionTimeoutRef.current = setTimeout(() => {
+          if (mountedRef.current) {
+            setShowTokenFlyup(false);
+            completeExerciseMutation.mutate();
+          }
+        }, 2000);
       } else {
         setFeedback(`${feedbackMessages[Math.floor(Math.random() * feedbackMessages.length)]} ${remaining} reps left!`);
         
@@ -148,24 +197,38 @@ export default function ExerciseTracking() {
       clearTimeout(restTimeoutRef.current);
       restTimeoutRef.current = null;
     }
+    if (completionTimeoutRef.current) {
+      clearTimeout(completionTimeoutRef.current);
+      completionTimeoutRef.current = null;
+    }
     
+    // Reset all states
     setCurrentReps(0);
     setIsTracking(false);
     setIsResting(false);
     setCountdown(null);
+    setHasCompleted(false);
+    setShowTokenFlyup(false);
+    completingRef.current = false; // Reset completion guard
     setFeedback("Position yourself in front of the camera");
     setUserExerciseId(null);
   };
   
   // Cleanup on unmount
   useEffect(() => {
+    mountedRef.current = true;
     return () => {
+      mountedRef.current = false;
       if (countdownIntervalRef.current) {
         clearInterval(countdownIntervalRef.current);
       }
       if (restTimeoutRef.current) {
         clearTimeout(restTimeoutRef.current);
       }
+      if (completionTimeoutRef.current) {
+        clearTimeout(completionTimeoutRef.current);
+      }
+      completingRef.current = false; // Reset completion guard
     };
   }, []);
 
@@ -201,35 +264,114 @@ export default function ExerciseTracking() {
       <div className="absolute inset-0 bg-gradient-to-br from-blue-600 to-purple-700">
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="text-center">
-            {countdown !== null ? (
-              <div className="text-center">
-                <div className="text-8xl font-bold text-white mb-4 animate-pulse" data-testid="countdown">
-                  {countdown || "GO!"}
-                </div>
-                <p className="text-white text-xl">Get ready to start!</p>
-              </div>
-            ) : (
-              <>
-                <div className="w-32 h-32 bg-white bg-opacity-20 rounded-full flex items-center justify-center mb-6 mx-auto">
-                  <svg className="w-16 h-16 text-white" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M13.5.67s.74 2.65.74 4.8c0 2.06-1.35 3.73-3.41 3.73-2.07 0-3.63-1.67-3.63-3.73l.03-.36C5.21 7.51 4 10.62 4 14c0 4.42 3.58 8 8 8s8-3.58 8-8C20 8.61 17.41 3.8 13.5.67z"/>
-                  </svg>
-                </div>
-                <p className="text-white text-lg mb-8">
-                  {isTracking ? (isResting ? "Take a rest..." : "Tap when you complete a rep!") : "Ready to start exercising?"}
-                </p>
-                {isTracking && (
-                  <Button
-                    onClick={handleRepComplete}
-                    disabled={isResting}
-                    className={`w-32 h-32 rounded-full text-2xl font-bold ${isResting ? 'bg-gray-500' : 'bg-green-500 hover:bg-green-600 animate-pulse'}`}
-                    data-testid="rep-complete-button"
+            <AnimatePresence mode="wait">
+              {countdown !== null ? (
+                <motion.div 
+                  key="countdown"
+                  className="text-center"
+                  initial={{ scale: 0.5, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 1.5, opacity: 0 }}
+                  transition={{ duration: 0.3 }}
+                >
+                  <motion.div 
+                    className="text-8xl font-bold text-white mb-4" 
+                    data-testid="countdown"
+                    animate={{ 
+                      scale: countdown === 0 ? [1, 1.2, 1] : [1, 1.1, 1],
+                      color: countdown === 0 ? "#22c55e" : "#ffffff"
+                    }}
+                    transition={{ duration: 0.5, repeat: 0 }}
+                    key={countdown}
                   >
-                    {isResting ? "Rest" : "REP!"}
-                  </Button>
-                )}
-              </>
-            )}
+                    {countdown || "GO!"}
+                  </motion.div>
+                  <p className="text-white text-xl">Get ready to start!</p>
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="exercise"
+                  initial={{ scale: 0.8, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  transition={{ duration: 0.5 }}
+                >
+                  <motion.div 
+                    className="w-32 h-32 bg-white bg-opacity-20 rounded-full flex items-center justify-center mb-6 mx-auto"
+                    animate={!prefersReducedMotion ? { rotate: [0, 5, -5, 0] } : {}}
+                    transition={!prefersReducedMotion ? { duration: 2, repeat: Infinity, ease: "easeInOut" } : {}}
+                  >
+                    <svg className="w-16 h-16 text-white" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M13.5.67s.74 2.65.74 4.8c0 2.06-1.35 3.73-3.41 3.73-2.07 0-3.63-1.67-3.63-3.73l.03-.36C5.21 7.51 4 10.62 4 14c0 4.42 3.58 8 8 8s8-3.58 8-8C20 8.61 17.41 3.8 13.5.67z"/>
+                    </svg>
+                  </motion.div>
+                  <p className="text-white text-lg mb-8">
+                    {isTracking ? (isResting ? "Take a rest..." : "Tap when you complete a rep!") : "Ready to start exercising?"}
+                  </p>
+                  {isTracking && (
+                    <div className="relative">
+                      <motion.button
+                        onClick={handleRepComplete}
+                        disabled={isResting || hasCompleted}
+                        className={`w-32 h-32 rounded-full text-2xl font-bold relative overflow-hidden ${
+                          isResting || hasCompleted ? 'bg-gray-500' : 'bg-green-500 hover:bg-green-600'
+                        }`}
+                        data-testid="rep-complete-button"
+                        whileTap={!prefersReducedMotion ? { scale: 0.95 } : {}}
+                        aria-disabled={isResting || hasCompleted}
+                      >
+                        {hasCompleted ? "Done!" : isResting ? "Rest" : "REP!"}
+                        
+                        {/* Pulse ring - GPU optimized */}
+                        {!isResting && !hasCompleted && !prefersReducedMotion && (
+                          <motion.div
+                            className="absolute inset-0 rounded-full border-4 border-green-400"
+                            animate={{ 
+                              scale: [1, 1.5],
+                              opacity: [0.7, 0]
+                            }}
+                            transition={{ 
+                              duration: 1.5, 
+                              repeat: Infinity,
+                              ease: "easeOut"
+                            }}
+                          />
+                        )}
+                        
+                        {/* Ripple effect */}
+                        <AnimatePresence>
+                          {repBurstKey > 0 && !prefersReducedMotion && (
+                            <motion.div
+                              key={repBurstKey}
+                              className="absolute inset-0 rounded-full bg-white opacity-30"
+                              initial={{ scale: 0 }}
+                              animate={{ scale: 2, opacity: 0 }}
+                              exit={{ opacity: 0 }}
+                              transition={{ duration: 0.6 }}
+                            />
+                          )}
+                        </AnimatePresence>
+                      </motion.button>
+                      
+                      {/* Token flyup animation */}
+                      <AnimatePresence>
+                        {showTokenFlyup && exercise && (
+                          <motion.div
+                            className="absolute top-0 left-1/2 transform -translate-x-1/2 text-yellow-400 font-bold text-2xl pointer-events-none"
+                            data-testid="text-token-flyup"
+                            initial={{ y: 0, opacity: 1, scale: 1 }}
+                            animate={{ y: -100, opacity: 0, scale: 1.5 }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 2 }}
+                          >
+                            +{exercise.tokenReward} 🪙
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         </div>
       </div>
@@ -245,6 +387,7 @@ export default function ExerciseTracking() {
               onClick={() => setLocation('/exercise-selection')}
               className="w-8 h-8 p-0 rounded-full bg-gray-200"
               data-testid="close-exercise"
+              disabled={hasCompleted || completeExerciseMutation.isPending}
             >
               <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
@@ -269,7 +412,14 @@ export default function ExerciseTracking() {
               <svg className="w-4 h-4 text-yellow-600" fill="currentColor" viewBox="0 0 24 24">
                 <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/>
               </svg>
-              <span className="text-yellow-800 text-sm font-medium" data-testid="exercise-feedback">{feedback}</span>
+              <span 
+                className="text-yellow-800 text-sm font-medium" 
+                data-testid="exercise-feedback"
+                aria-live="polite" 
+                role="status"
+              >
+                {feedback}
+              </span>
             </div>
           </div>
         </div>
@@ -317,6 +467,7 @@ export default function ExerciseTracking() {
                 variant="outline"
                 className="flex-1 text-sm"
                 data-testid="reset-exercise"
+                disabled={hasCompleted || completeExerciseMutation.isPending}
               >
                 🔄 Reset
               </Button>
@@ -325,10 +476,17 @@ export default function ExerciseTracking() {
                 variant="destructive"
                 className="flex-1 text-sm"
                 data-testid="stop-exercise"
+                disabled={hasCompleted || completeExerciseMutation.isPending}
               >
                 ⏹️ Stop
               </Button>
             </div>
+            
+            {(hasCompleted || completeExerciseMutation.isPending) && (
+              <div className="text-center text-sm text-gray-600 mb-2">
+                ⏳ Finishing exercise...
+              </div>
+            )}
             
             {/* Quick Stats */}
             <div className="grid grid-cols-3 gap-2 text-center text-xs">
